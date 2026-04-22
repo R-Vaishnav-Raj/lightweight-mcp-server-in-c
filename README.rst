@@ -29,6 +29,22 @@ Functionality
 * **Endpoint:** ``POST /mcp``
 * **Response:** ``{"status": "ok"}``
 
+Test Endpoints
+--------------
+
+**Basic MCP Endpoint**
+
+.. code-block:: bash
+
+    curl -X POST http://localhost:8080/mcp
+
+Expected output:
+
+.. code-block:: json
+
+    {"status": "ok"}
+
+---
 
 Module 3 – MCP Dispatcher
 ==========================
@@ -111,6 +127,179 @@ Error Handling
 | Wrong method or path         | 404  | ``{"error":"not found"}`` |
 +------------------------------+------+---------------------------+
 
+Test Endpoints
+--------------
+
+**get_ports (stub)**
+
+.. code-block:: bash
+
+    curl -X POST http://localhost:8080/mcp \
+      -H "Content-Type: application/json" \
+      -d '{"tool": "get_ports"}'
+
+Expected output:
+
+.. code-block:: json
+
+    {"tool":"get_ports","result":"stub"}
+
+**get_flows (stub)**
+
+.. code-block:: bash
+
+    curl -X POST http://localhost:8080/mcp \
+      -H "Content-Type: application/json" \
+      -d '{"tool": "get_flows"}'
+
+Expected output:
+
+.. code-block:: json
+
+    {"tool":"get_flows","result":"stub"}
+
+**get_port_stats (stub)**
+
+.. code-block:: bash
+
+    curl -X POST http://localhost:8080/mcp \
+      -H "Content-Type: application/json" \
+      -d '{"tool": "get_port_stats"}'
+
+Expected output:
+
+.. code-block:: json
+
+    {"tool":"get_port_stats","result":"stub"}
+
+**Unknown tool**
+
+.. code-block:: bash
+
+    curl -X POST http://localhost:8080/mcp \
+      -H "Content-Type: application/json" \
+      -d '{"tool": "unknown"}'
+
+Expected output:
+
+.. code-block:: json
+
+    {"error":"unknown tool"}
+
+**Bad JSON**
+
+.. code-block:: bash
+
+    curl -X POST http://localhost:8080/mcp \
+      -H "Content-Type: application/json" \
+      -d 'not json'
+
+Expected output:
+
+.. code-block:: json
+
+    {"error":"invalid JSON"}
+
+---
+
+Module 4 – Connect MCP to OVS Internals
+========================================
+
+Files Modified
+--------------
+
+* ``vswitchd/mcp_server.c``
+    * Implemented ``handle_get_ports()`` using OVSDB IDL —
+      traverses bridge → port → interface hierarchy via
+      ``OVSREC_BRIDGE_FOR_EACH``.
+    * Implemented ``handle_get_flows()`` calling
+      ``bridge_get_all_flows()``.
+    * Implemented ``handle_get_port_stats()`` calling
+      ``bridge_get_port_stats()``.
+
+* ``vswitchd/bridge.c``
+    * Added ``bridge_get_idl()`` to expose the internal IDL pointer.
+    * Added ``bridge_get_all_flows()`` to walk all bridges and dump
+      flow tables using ``ofproto_get_all_flows()``.
+    * Added ``bridge_get_port_stats()`` to walk bridge → port →
+      interface and call ``netdev_get_stats()`` per interface.
+
+* ``vswitchd/bridge.h``
+    * Declared ``bridge_get_idl()``.
+    * Declared ``bridge_get_all_flows()``.
+    * Declared ``bridge_get_port_stats()``.
+
+* ``vswitchd/ovs-vswitchd.c``
+    * Moved ``bridge_get_idl()`` call to after ``bridge_init()``
+      so the IDL pointer is valid before use.
+
+Functionality
+-------------
+
+All three tools now return real OVS data instead of stubs.
+
++--------------------+-----------------------------+------------------------+
+| Tool               | Data Source                 | Access Method          |
++====================+=============================+========================+
+| ``get_ports``      | OVSDB IDL (public)          | Direct from            |
+|                    |                             | ``mcp_server.c``       |
++--------------------+-----------------------------+------------------------+
+| ``get_flows``      | ``br->ofproto`` (private)   | Via                    |
+|                    |                             | ``bridge_get_all_      |
+|                    |                             | flows()``              |
++--------------------+-----------------------------+------------------------+
+| ``get_port_stats`` | ``iface->netdev`` (private) | Via                    |
+|                    |                             | ``bridge_get_port_     |
+|                    |                             | stats()``              |
++--------------------+-----------------------------+------------------------+
+
+Test Endpoints
+--------------
+
+**get_ports**
+
+.. code-block:: bash
+
+    curl -X POST http://localhost:8080/mcp \
+      -H "Content-Type: application/json" \
+      -d '{"tool": "get_ports"}'
+
+Expected output:
+
+.. code-block:: json
+
+    {"action":"switch.get_ports","data":[{"name":"br0","bridge":"br0","type":"internal"}]}
+
+**get_flows**
+
+.. code-block:: bash
+
+    curl -X POST http://localhost:8080/mcp \
+      -H "Content-Type: application/json" \
+      -d '{"tool": "get_flows"}'
+
+Expected output:
+
+.. code-block:: json
+
+    {"flows":"bridge: br0\nduration=5s, n_packets=0, n_bytes=0, priority=0,actions=NORMAL\ntable_id=254, duration=5s, n_packets=0, n_bytes=0, priority=2,recirc_id=0,actions=drop\n","tool":"get_flows"}
+
+**get_port_stats**
+
+.. code-block:: bash
+
+    curl -X POST http://localhost:8080/mcp \
+      -H "Content-Type: application/json" \
+      -d '{"tool": "get_port_stats"}'
+
+Expected output:
+
+.. code-block:: json
+
+    {"stats":[{"name":"br0","tx_packets":0,"rx_errors":0,"tx_dropped":0,"bridge":"br0","rx_packets":0,"tx_bytes":0,"rx_dropped":0,"tx_errors":0,"rx_bytes":0}],"tool":"get_port_stats"}
+
+---
+
 Setup and Run
 =============
 
@@ -148,32 +337,8 @@ Start switch:
 
     sudo ovs-vswitchd --pidfile --detach
 
-Test Endpoint
--------------
+Create a test bridge:
 
 .. code-block:: bash
 
-    # get ports
-    curl -X POST http://localhost:8080/mcp \
-      -H "Content-Type: application/json" \
-      -d '{"tool": "get_ports"}'
-
-    # get flows
-    curl -X POST http://localhost:8080/mcp \
-      -H "Content-Type: application/json" \
-      -d '{"tool": "get_flows"}'
-
-    # get port stats
-    curl -X POST http://localhost:8080/mcp \
-      -H "Content-Type: application/json" \
-      -d '{"tool": "get_port_stats"}'
-
-    # unknown tool
-    curl -X POST http://localhost:8080/mcp \
-      -H "Content-Type: application/json" \
-      -d '{"tool": "unknown"}'
-
-    # bad JSON
-    curl -X POST http://localhost:8080/mcp \
-      -H "Content-Type: application/json" \
-      -d 'not json'
+    sudo ovs-vsctl add-br br0
