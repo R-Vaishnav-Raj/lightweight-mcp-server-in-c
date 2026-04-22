@@ -16,6 +16,7 @@
 #include "ovs-thread.h"
 #include "mcp_server.h"
 #include "ovs-rcu.h"
+#include "bridge.h"
 
 #define PORT 8080
 
@@ -100,13 +101,18 @@ static void handle_get_ports(int client_fd, struct ovsdb_idl *idl)
     json_destroy(result);
 }
 
-static void handle_get_flows(int client_fd)
+static void
+handle_get_flows(int client_fd)
 {
+    char *flows_str = bridge_get_all_flows();
+
     struct json *result = json_object_create();
-    json_object_put_string(result, "tool",   "get_flows");
-    json_object_put_string(result, "result", "stub");
+    json_object_put_string(result, "tool", "get_flows");
+    json_object_put_string(result, "flows", flows_str ? flows_str : "");
+
     send_json(client_fd, 200, "OK", result);
     json_destroy(result);
+    free(flows_str);
 }
 
 static void handle_get_port_stats(int client_fd)

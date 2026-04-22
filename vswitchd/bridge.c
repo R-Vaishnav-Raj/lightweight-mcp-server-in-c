@@ -406,6 +406,24 @@ bridge_init_ofproto(const struct ovsrec_open_vswitch *cfg)
     initialized = true;
 }
 
+char *
+bridge_get_all_flows(void)
+{
+    struct bridge *br;
+    struct ds result;
+
+    ds_init(&result);
+
+    HMAP_FOR_EACH (br, node, &all_bridges) {
+        ds_put_format(&result, "bridge: %s\n", br->name);
+        ofproto_get_all_flows(br->ofproto, &result, false);
+        ds_put_char(&result, '\n');
+    }
+
+    /* ds_steal_cstr gives us a malloc'd string — caller must free() it */
+    return ds_steal_cstr(&result);
+}
+
 static void
 if_change_cb(void *aux OVS_UNUSED)
 {
