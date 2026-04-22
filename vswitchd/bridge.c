@@ -540,6 +540,10 @@ bridge_init(const char *remote)
     if_notifier_manual_set_cb(if_change_cb);
 }
 
+struct ovsdb_idl *bridge_get_idl(void) {
+    return idl;
+}
+
 void
 bridge_exit(bool delete_datapath)
 {

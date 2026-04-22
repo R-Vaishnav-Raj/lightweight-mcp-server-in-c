@@ -22,7 +22,7 @@ struct simap;
 
 void bridge_init(const char *remote);
 void bridge_exit(bool delete_datapath);
-
+struct ovsdb_idl *bridge_get_idl(void);
 void bridge_run(void);
 void bridge_wait(void);
 

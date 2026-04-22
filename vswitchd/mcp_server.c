@@ -8,10 +8,14 @@
 #include <arpa/inet.h>
 #include <fcntl.h>
 
+#include "vswitch-idl.h"
+#include "ovsdb-idl.h"
 #include "openvswitch/json.h"
 #include "openvswitch/shash.h"
 #include "openvswitch/util.h"
+#include "ovs-thread.h"
 #include "mcp_server.h"
+#include "ovs-rcu.h"
 
 #define PORT 8080
 
@@ -49,11 +53,49 @@ send_error(int client_fd, int code, const char *status, const char *message)
 }
 
 //handlers
-static void handle_get_ports(int client_fd)
+static void handle_get_ports(int client_fd, struct ovsdb_idl *idl)
 {
+    if (!idl || !ovsdb_idl_has_ever_connected(idl)) {
+        send_error(client_fd, 503, "Service Unavailable", "OVSDB not ready");
+        return;
+    }
+
     struct json *result = json_object_create();
-    json_object_put_string(result, "tool",   "get_ports");
-    json_object_put_string(result, "result", "stub");
+    json_object_put_string(result, "action", "switch.get_ports");
+
+    struct json *iface_array = json_array_create_empty();
+
+    const struct ovsrec_bridge *br;
+
+    OVSREC_BRIDGE_FOR_EACH (br, idl) {
+        if (!br || !br->ports) continue;
+
+        for (size_t i = 0; i < br->n_ports; i++) {
+            struct ovsrec_port *port = br->ports[i];
+            if (!port || !port->interfaces) continue;
+
+            for (size_t j = 0; j < port->n_interfaces; j++) {
+                struct ovsrec_interface *iface = port->interfaces[j];
+                if (!iface) continue;
+
+                struct json *entry = json_object_create();
+
+                json_object_put_string(entry, "name",
+                    iface->name ? iface->name : "unknown");
+
+                json_object_put_string(entry, "type",
+                    iface->type ? iface->type : "system");
+
+                json_object_put_string(entry, "bridge",
+                    br->name ? br->name : "unknown");
+
+                json_array_add(iface_array, entry);
+            }
+        }
+    }
+
+    json_object_put(result, "data", iface_array);
+
     send_json(client_fd, 200, "OK", result);
     json_destroy(result);
 }
@@ -78,7 +120,7 @@ static void handle_get_port_stats(int client_fd)
 
 //dispatcher
 
-static void mcp_dispatch(int client_fd, const char *body)
+static void mcp_dispatch(int client_fd, const char *body,struct ovsdb_idl *idl)
 {
     //parse the JSON body
     struct json *request = json_from_string(body);
@@ -101,7 +143,7 @@ static void mcp_dispatch(int client_fd, const char *body)
 
     // route to handler
     if (strcmp(tool, "get_ports") == 0) {
-        handle_get_ports(client_fd);
+        handle_get_ports(client_fd, idl);
     } else if (strcmp(tool, "get_flows") == 0) {
         handle_get_flows(client_fd);
     } else if (strcmp(tool, "get_port_stats") == 0) {
@@ -139,7 +181,7 @@ void mcp_server_init(void)
     printf("MCP server started on port %d\n", PORT);
 }
 
-void mcp_server_run(void)
+void mcp_server_run(struct ovsdb_idl *idl)
 {
     char buffer[4096];
     char method[16], path[256];
@@ -175,7 +217,7 @@ void mcp_server_run(void)
     }
     body += 4;
 
-    mcp_dispatch(client_fd, body);
+    mcp_dispatch(client_fd, body, idl);
     close(client_fd);
 }
 

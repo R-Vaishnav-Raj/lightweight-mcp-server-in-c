@@ -83,7 +83,6 @@ main(int argc, char *argv[])
     char *unixctl_path = NULL;
     char *remote;
     int retval;
-
     set_program_name(argv[0]);
     ovsthread_id_init();
 
@@ -122,6 +121,7 @@ main(int argc, char *argv[])
 
     bridge_init(remote);
     free(remote);
+    struct ovsdb_idl *idl = bridge_get_idl();
     mcp_server_init();
 
     while (!exit_args.exiting) {
@@ -135,7 +135,7 @@ main(int argc, char *argv[])
             memory_report(&usage);
             simap_destroy(&usage);
         }
-        mcp_server_run();
+        mcp_server_run(idl);
         bridge_run();
         unixctl_server_run(unixctl);
         netdev_run();
