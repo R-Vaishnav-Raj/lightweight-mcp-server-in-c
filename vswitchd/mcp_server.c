@@ -158,6 +158,50 @@ handle_set_vlan(int client_fd, struct json *arguments)
     json_destroy(result);
 }
 
+static void
+handle_set_port_state(int client_fd, struct json *arguments)
+{
+
+    struct json *port_item = shash_find_data(arguments->object, "port");
+    if (!port_item || port_item->type != JSON_STRING) {
+        send_error(client_fd, 400, "Bad Request", "missing port argument");
+        return;
+    }
+
+    struct json *state_item = shash_find_data(arguments->object, "state");
+    if (!state_item || state_item->type != JSON_STRING) {
+        send_error(client_fd, 400, "Bad Request", "missing state argument");
+        return;
+    }
+
+    const char *port_name = json_string(port_item);
+    const char *state_str = json_string(state_item);
+
+    bool up;
+    if (strcmp(state_str, "up") == 0) {
+        up = true;
+    } else if (strcmp(state_str, "down") == 0) {
+        up = false;
+    } else {
+        send_error(client_fd, 400, "Bad Request",
+                   "state must be 'up' or 'down'");
+        return;
+    }
+
+    int ret = bridge_set_port_state(port_name, up);
+    if (ret != 0) {
+        send_error(client_fd, 404, "Not Found", "port not found");
+        return;
+    }
+
+    struct json *result = json_object_create();
+    json_object_put_string(result, "tool",   "set_port_state");
+    json_object_put_string(result, "port",   port_name);
+    json_object_put_string(result, "state",  state_str);
+    json_object_put_string(result, "status", "ok");
+    send_json(client_fd, 200, "OK", result);
+    json_destroy(result);
+}
 //dispatcher
 
 static void mcp_dispatch(int client_fd, const char *body,struct ovsdb_idl *idl)
@@ -195,6 +239,12 @@ static void mcp_dispatch(int client_fd, const char *body,struct ovsdb_idl *idl)
             send_error(client_fd, 400, "Bad Request", "missing arguments");
         } else {
             handle_set_vlan(client_fd, arguments);
+        }
+    } else if (strcmp(tool, "set_port_state") == 0) {
+        if (!arguments || arguments->type != JSON_OBJECT) {
+            send_error(client_fd, 400, "Bad Request", "missing arguments");
+        } else {
+            handle_set_port_state(client_fd, arguments);
         }
     } else {
         send_error(client_fd, 404, "Not Found", "unknown tool");

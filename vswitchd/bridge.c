@@ -504,6 +504,50 @@ bridge_set_vlan(const char *port_name, int64_t vlan_id)
     return -1; 
 }
 
+
+int
+bridge_set_port_state(const char *port_name, bool up)
+{
+    struct bridge *br;
+
+    HMAP_FOR_EACH(br, node, &all_bridges) {
+        struct port *p = port_lookup(br, port_name);
+        if (!p) {
+            continue;
+        }
+
+        /* Walk all interfaces on this port (handles bonds too) */
+        struct iface *iface;
+        LIST_FOR_EACH(iface, port_elem, &p->ifaces) {
+            if (!iface->netdev) {
+                continue;
+            }
+
+            int error;
+            if (up) {
+                error = netdev_turn_flags_on(iface->netdev,
+                                             NETDEV_UP, NULL);
+            } else {
+                error = netdev_turn_flags_off(iface->netdev,
+                                              NETDEV_UP, NULL);
+            }
+
+            if (error) {
+                VLOG_WARN("set_port_state: failed to %s interface %s: %s",
+                          up ? "enable" : "disable",
+                          iface->name, ovs_strerror(error));
+                return -1;
+            }
+
+            VLOG_INFO("set_port_state: %s interface %s",
+                      up ? "enabled" : "disabled", iface->name);
+        }
+        return 0;  /* port found and all ifaces updated */
+    }
+
+    return -1;  /* port not found */
+}
+
 static void
 if_change_cb(void *aux OVS_UNUSED)
 {

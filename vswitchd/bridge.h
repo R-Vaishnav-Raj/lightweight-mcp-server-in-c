@@ -25,6 +25,7 @@ void bridge_init(const char *remote);
 char *bridge_get_all_flows(void);
 struct json *bridge_get_port_stats(void);
 int bridge_set_vlan(const char *port_name,int64_t vlan_id);
+int bridge_set_port_state(const char *port_name, bool up);
 void bridge_exit(bool delete_datapath);
 struct ovsdb_idl *bridge_get_idl(void);
 void bridge_run(void);
