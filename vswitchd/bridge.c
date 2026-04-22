@@ -472,6 +472,38 @@ bridge_get_port_stats(void)
     return result;
 }
 
+int
+bridge_set_vlan(const char *port_name, int64_t vlan_id)
+{
+    const struct ovsrec_port *port;
+
+    OVSREC_PORT_FOR_EACH(port, idl) {
+        if (strcmp(port->name, port_name) == 0) {
+
+            struct ovsdb_idl_txn *txn = ovsdb_idl_txn_create(idl);
+            ovsrec_port_set_tag(port, &vlan_id, 1);
+            enum ovsdb_idl_txn_status status =
+                ovsdb_idl_txn_commit_block(txn);
+            ovsdb_idl_txn_destroy(txn);
+
+            if (status != TXN_SUCCESS && status != TXN_UNCHANGED) {
+                return -1;
+            }
+
+            struct bridge *br;
+            HMAP_FOR_EACH(br, node, &all_bridges) {
+                struct port *p = port_lookup(br, port_name);
+                if (p) {
+                    port_configure(p);
+                    return 0;
+                }
+            }
+            return 0;
+        }
+    }
+    return -1; 
+}
+
 static void
 if_change_cb(void *aux OVS_UNUSED)
 {
@@ -505,7 +537,8 @@ bridge_init(const char *remote)
     idl_seqno = ovsdb_idl_get_seqno(idl);
     ovsdb_idl_set_lock(idl, "ovs_vswitchd");
     ovsdb_idl_verify_write_only(idl);
-
+    ovsdb_idl_add_column(idl, &ovsrec_port_col_tag);
+    ovsdb_idl_omit_alert(idl, &ovsrec_port_col_tag);
     ovsdb_idl_omit_alert(idl, &ovsrec_open_vswitch_col_cur_cfg);
     ovsdb_idl_omit_alert(idl, &ovsrec_open_vswitch_col_statistics);
     ovsdb_idl_omit_alert(idl, &ovsrec_open_vswitch_col_datapath_types);

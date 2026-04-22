@@ -21,7 +21,6 @@
 #define PORT 8080
 
 static int server_fd = -1;
-
 //response helper
 static void send_json(int client_fd, int code, const char *status, struct json *json_body)
 {
@@ -125,6 +124,40 @@ handle_get_port_stats(int client_fd)
     json_destroy(result);
 }
 
+static void
+handle_set_vlan(int client_fd, struct json *arguments)
+{
+    struct json *port_item = shash_find_data(arguments->object, "port");
+    if (!port_item || port_item->type != JSON_STRING) {
+        send_error(client_fd, 400, "Bad Request", "missing port argument");
+        return;
+    }
+
+    struct json *vlan_item = shash_find_data(arguments->object, "vlan");
+    if (!vlan_item || vlan_item->type != JSON_INTEGER) {
+        send_error(client_fd, 400, "Bad Request", "missing vlan argument");
+        return;
+    }
+
+    const char *port_name = json_string(port_item);
+    int64_t vlan_id = vlan_item->integer;
+
+    int ret = bridge_set_vlan(port_name, vlan_id);
+    if (ret != 0) {
+        send_error(client_fd, 404, "Not Found", "port not found");
+        return;
+    }
+
+    struct json *result = json_object_create();
+    json_object_put_string(result, "tool",   "set_vlan");
+    json_object_put_string(result, "port",   port_name);
+    json_object_put(result, "vlan",
+                    json_integer_create(vlan_id));
+    json_object_put_string(result, "status", "ok");
+    send_json(client_fd, 200, "OK", result);
+    json_destroy(result);
+}
+
 //dispatcher
 
 static void mcp_dispatch(int client_fd, const char *body,struct ovsdb_idl *idl)
@@ -148,13 +181,21 @@ static void mcp_dispatch(int client_fd, const char *body,struct ovsdb_idl *idl)
     const char *tool = json_string(tool_item);
     printf("MCP tool: %s\n", tool);
 
+    struct json *arguments = shash_find_data(request->object, "arguments");
+
     // route to handler
     if (strcmp(tool, "get_ports") == 0) {
-        handle_get_ports(client_fd, idl);
+        handle_get_ports(client_fd,idl);
     } else if (strcmp(tool, "get_flows") == 0) {
         handle_get_flows(client_fd);
     } else if (strcmp(tool, "get_port_stats") == 0) {
         handle_get_port_stats(client_fd);
+    } else if (strcmp(tool, "set_vlan") == 0) {
+        if (!arguments || arguments->type != JSON_OBJECT) {
+            send_error(client_fd, 400, "Bad Request", "missing arguments");
+        } else {
+            handle_set_vlan(client_fd, arguments);
+        }
     } else {
         send_error(client_fd, 404, "Not Found", "unknown tool");
     }
