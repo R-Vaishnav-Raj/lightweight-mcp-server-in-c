@@ -24,6 +24,7 @@
 #include <sys/mman.h>
 #endif
 
+#include "ap_mcp_server.h"
 #include "mcp_server.h"
 #include "bridge.h"
 #include "command-line.h"
@@ -123,6 +124,7 @@ main(int argc, char *argv[])
     free(remote);
     struct ovsdb_idl *idl = bridge_get_idl();
     mcp_server_init();
+    ap_mcp_server_init();
 
     while (!exit_args.exiting) {
         OVS_USDT_PROBE(main, run_start);
@@ -135,6 +137,7 @@ main(int argc, char *argv[])
             memory_report(&usage);
             simap_destroy(&usage);
         }
+        ap_mcp_server_run(); 
         mcp_server_run(idl);
         bridge_run();
         unixctl_server_run(unixctl);
@@ -166,6 +169,7 @@ main(int argc, char *argv[])
     ovsrcu_exit();
     dns_resolve_destroy();
     mcp_server_close();
+    ap_mcp_server_close();
 
     return 0;
 }
