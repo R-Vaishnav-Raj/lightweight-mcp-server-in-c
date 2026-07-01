@@ -80,8 +80,10 @@ def ap_mcp(tool: str, arguments: dict = None) -> dict:
 
 
 root_agent = Agent(
-    name="network_agent",
+    name="ovs_switch_agent",
+    #model=LiteLlm(model="ollama_chat/qwen3:4b"),
     model="gemini-3.1-flash-lite",
+
     description=(
         "An AI assistant for managing both an Open vSwitch (OVS) "
         "software switch and a WiFi Access Point in real time."
