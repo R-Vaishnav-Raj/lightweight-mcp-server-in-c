@@ -10,7 +10,9 @@ vswitchd_ovs_vswitchd_SOURCES = \
 	vswitchd/system-stats.c \
 	vswitchd/system-stats.h \
 	vswitchd/mcp_server.c \
-	vswitchd/mcp_server.h 
+	vswitchd/mcp_server.h \
+	vswitchd/ap_mcp_server.c \
+	vswitchd/ap_mcp_server.h
 vswitchd_ovs_vswitchd_LDADD = \
 	ofproto/libofproto.la \
 	lib/libsflow.la \
